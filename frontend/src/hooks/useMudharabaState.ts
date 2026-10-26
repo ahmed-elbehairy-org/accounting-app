@@ -1,59 +1,71 @@
 import { useState, useEffect } from 'react'
 import type { AppState, Partner, TradingRound, ShareInvestment, AdvanceLoan } from '../types/mudharaba'
+import type { Project, CashflowItem, Product, ProductCostItem } from '../types/accounting'
 import { loadAppState, saveAppState, resetToEmptyData } from '../services/storageService'
 
 export function useMudharabaState() {
   const [state, setState] = useState<AppState>(() => loadAppState())
+  useEffect(() => { saveAppState(state) }, [state])
 
-  useEffect(() => {
-    saveAppState(state)
-  }, [state])
-
-  const addPartner = (data: Omit<Partner, 'id' | 'activeSharesCount' | 'totalInvestedCapital' | 'outstandingLoans'>) => {
-    const newPartner: Partner = { ...data, id: `p-${Date.now()}`, activeSharesCount: 0, totalInvestedCapital: 0, outstandingLoans: 0 }
-    setState((prev) => ({ ...prev, partners: [newPartner, ...prev.partners] }))
+  const addPartner = (d: Omit<Partner, 'id' | 'activeSharesCount' | 'totalInvestedCapital' | 'outstandingLoans'>) => {
+    setState((p) => ({ ...p, partners: [{ ...d, id: `p-${Date.now()}`, activeSharesCount: 0, totalInvestedCapital: 0, outstandingLoans: 0 }, ...p.partners] }))
   }
 
-  const addRound = (data: Omit<TradingRound, 'id' | 'totalAllocatedShares' | 'status'>) => {
-    const newRound: TradingRound = { ...data, id: `r-${Date.now()}`, totalAllocatedShares: 0, status: 'active' }
-    setState((prev) => ({ ...prev, rounds: [newRound, ...prev.rounds] }))
+  const addRound = (d: Omit<TradingRound, 'id' | 'totalAllocatedShares' | 'status'>) => {
+    setState((p) => ({ ...p, rounds: [{ ...d, id: `r-${Date.now()}`, totalAllocatedShares: 0, status: 'active' }, ...p.rounds] }))
   }
 
-  const allocateShares = (data: Omit<ShareInvestment, 'id'>) => {
-    const newInv: ShareInvestment = { ...data, id: `inv-${Date.now()}` }
-    setState((prev) => {
-      const rounds = prev.rounds.map((r) => r.id === data.roundId ? { ...r, totalAllocatedShares: r.totalAllocatedShares + data.shareCount } : r)
-      const partners = prev.partners.map((p) => p.id === data.partnerId ? { ...p, activeSharesCount: p.activeSharesCount + data.shareCount, totalInvestedCapital: p.totalInvestedCapital + data.totalAmount } : p)
-      return { ...prev, investments: [newInv, ...prev.investments], rounds, partners }
-    })
-  }
-
-  const addAdvance = (data: Omit<AdvanceLoan, 'id' | 'status' | 'settledAmount'>) => {
-    const newAdv: AdvanceLoan = { ...data, id: `adv-${Date.now()}`, status: 'open', settledAmount: 0 }
+  const allocateShares = (d: Omit<ShareInvestment, 'id'>) => {
     setState((prev) => ({
       ...prev,
-      advances: [newAdv, ...prev.advances],
-      partners: prev.partners.map((p) => p.id === data.partnerId ? { ...p, outstandingLoans: p.outstandingLoans + data.amount } : p)
+      investments: [{ ...d, id: `inv-${Date.now()}` }, ...prev.investments],
+      rounds: prev.rounds.map((r) => r.id === d.roundId ? { ...r, totalAllocatedShares: r.totalAllocatedShares + d.shareCount } : r),
+      partners: prev.partners.map((p) => p.id === d.partnerId ? { ...p, activeSharesCount: p.activeSharesCount + d.shareCount, totalInvestedCapital: p.totalInvestedCapital + d.totalAmount } : p)
     }))
   }
 
-  const settleAdvance = (advanceId: string) => {
+  const addAdvance = (d: Omit<AdvanceLoan, 'id' | 'status' | 'settledAmount'>) => {
+    setState((p) => ({
+      ...p,
+      advances: [{ ...d, id: `adv-${Date.now()}`, status: 'open', settledAmount: 0 }, ...p.advances],
+      partners: p.partners.map((partner) => partner.id === d.partnerId ? { ...partner, outstandingLoans: partner.outstandingLoans + d.amount } : partner)
+    }))
+  }
+
+  const settleAdvance = (id: string) => {
     setState((prev) => {
-      const adv = prev.advances.find((a) => a.id === advanceId)
+      const adv = prev.advances.find((a) => a.id === id)
       if (!adv) return prev
       return {
         ...prev,
-        advances: prev.advances.map((a) => a.id === advanceId ? { ...a, status: 'settled' as const, settledAmount: a.amount } : a),
+        advances: prev.advances.map((a) => a.id === id ? { ...a, status: 'settled' as const, settledAmount: a.amount } : a),
         partners: prev.partners.map((p) => p.id === adv.partnerId ? { ...p, outstandingLoans: Math.max(0, p.outstandingLoans - adv.amount) } : p)
       }
     })
   }
 
-  const resetAllData = () => {
-    if (window.confirm('هل تريد مسح جميع البيانات والبدء بحساب فارغ؟')) {
-      setState(resetToEmptyData())
-    }
+  const addProject = (d: Omit<Project, 'id' | 'createdAt'>) => {
+    setState((p) => ({ ...p, projects: [{ ...d, id: `proj-${Date.now()}`, createdAt: new Date().toISOString() }, ...p.projects] }))
   }
 
-  return { state, setState, addPartner, addRound, allocateShares, addAdvance, settleAdvance, resetAllData }
+  const addCashflow = (d: Omit<CashflowItem, 'id'>) => {
+    setState((p) => ({ ...p, cashflows: [{ ...d, id: `cf-${Date.now()}` }, ...p.cashflows] }))
+  }
+
+  const addProduct = (d: Omit<Product, 'id'>) => {
+    setState((p) => ({ ...p, products: [{ ...d, id: `prod-${Date.now()}` }, ...p.products] }))
+  }
+
+  const addCostItem = (d: Omit<ProductCostItem, 'id'>) => {
+    setState((p) => ({ ...p, costItems: [{ ...d, id: `pci-${Date.now()}` }, ...p.costItems] }))
+  }
+
+  const resetAllData = () => {
+    if (window.confirm('هل تريد مسح جميع البيانات والبدء بحساب فارغ؟')) setState(resetToEmptyData())
+  }
+
+  return {
+    state, setState, addPartner, addRound, allocateShares, addAdvance, settleAdvance,
+    addProject, addCashflow, addProduct, addCostItem, resetAllData
+  }
 }

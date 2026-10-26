@@ -70,6 +70,8 @@ export interface SettlementPayout {
   paid: boolean
 }
 
+import type { Project, CashflowItem, Product, ProductCostItem } from './accounting'
+
 export interface AppState {
   partners: Partner[]
   rounds: TradingRound[]
@@ -77,4 +79,9 @@ export interface AppState {
   advances: AdvanceLoan[]
   liquidations: Liquidation[]
   settlements: SettlementPayout[]
+  projects: Project[]
+  cashflows: CashflowItem[]
+  products: Product[]
+  costItems: ProductCostItem[]
 }
+

@@ -8,7 +8,11 @@ export const EMPTY_STATE: AppState = {
   investments: [],
   advances: [],
   liquidations: [],
-  settlements: []
+  settlements: [],
+  projects: [],
+  cashflows: [],
+  products: [],
+  costItems: []
 }
 
 export function loadAppState(): AppState {
@@ -18,7 +22,11 @@ export function loadAppState(): AppState {
       saveAppState(EMPTY_STATE)
       return EMPTY_STATE
     }
-    return JSON.parse(raw) as AppState
+    const parsed = JSON.parse(raw) as AppState
+    return {
+      ...EMPTY_STATE,
+      ...parsed
+    }
   } catch (err) {
     console.error('Failed to load state', err)
     return EMPTY_STATE

@@ -7,6 +7,10 @@ import { ShareInvestmentEntity } from '../entities/share-investment.entity'
 import { AdvanceLoanEntity } from '../entities/advance-loan.entity'
 import { LiquidationEntity } from '../entities/liquidation.entity'
 import { SettlementPayoutEntity } from '../entities/settlement-payout.entity'
+import { ProjectEntity } from '../entities/project.entity'
+import { CashflowEntity } from '../entities/cashflow.entity'
+import { ProductEntity } from '../entities/product.entity'
+import { ProductCostItemEntity } from '../entities/product-cost-item.entity'
 
 @Module({
   imports: [
@@ -21,12 +25,9 @@ import { SettlementPayoutEntity } from '../entities/settlement-payout.entity'
         password: cfg.get<string>('DB_PASSWORD', 'postgres'),
         database: cfg.get<string>('DB_DATABASE', 'accounting_db'),
         entities: [
-          PartnerEntity,
-          TradingRoundEntity,
-          ShareInvestmentEntity,
-          AdvanceLoanEntity,
-          LiquidationEntity,
-          SettlementPayoutEntity
+          PartnerEntity, TradingRoundEntity, ShareInvestmentEntity,
+          AdvanceLoanEntity, LiquidationEntity, SettlementPayoutEntity,
+          ProjectEntity, CashflowEntity, ProductEntity, ProductCostItemEntity
         ],
         synchronize: cfg.get<boolean>('DB_SYNCHRONIZE', true),
         logging: false
