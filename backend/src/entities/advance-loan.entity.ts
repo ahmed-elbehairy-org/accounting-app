@@ -1,10 +1,8 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm'
+import { Entity, Column } from 'typeorm'
+import { BaseAppEntity } from './base.entity'
 
 @Entity('advance_loans')
-export class AdvanceLoanEntity {
-  @PrimaryColumn()
-  id: string
-
+export class AdvanceLoanEntity extends BaseAppEntity {
   @Column()
   partnerId: string
 
@@ -25,7 +23,5 @@ export class AdvanceLoanEntity {
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   settledAmount: number
-
-  @CreateDateColumn()
-  createdAt: Date
 }
+

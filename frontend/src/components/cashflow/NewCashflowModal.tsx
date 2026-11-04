@@ -1,80 +1,83 @@
-import { useState } from 'react'
-import { X, Receipt } from 'lucide-react'
-import type { Project, CashflowItem } from '../../types/accounting'
+import { useState, useEffect } from 'react'
+import { apiClient } from '../../services/apiClient'
+import { getSavedCategories, saveCategory, getSavedDescriptions, saveDescription } from '../../services/savedTransactionPresets'
+import type { Project } from '../../types'
+import { X } from 'lucide-react'
 
 interface Props {
   isOpen: boolean
   projects: Project[]
-  selectedProjectId?: string
+  defaultProjectId?: string
   onClose: () => void
-  onSave: (c: Omit<CashflowItem, 'id'>) => void
+  onCreated: () => void
 }
 
-export function NewCashflowModal({ isOpen, projects, selectedProjectId, onClose, onSave }: Props) {
-  const [projectId, setProjectId] = useState(selectedProjectId || '')
-  const [type, setType] = useState<'inflow' | 'outflow'>('outflow')
-  const [category, setCategory] = useState('raw_material')
-  const [amount, setAmount] = useState<number>(100)
+export function NewCashflowModal({ isOpen, projects, defaultProjectId, onClose, onCreated }: Props) {
+  const [projectId, setProjectId] = useState(defaultProjectId || (projects[0]?.id ?? ''))
+  const [type, setType] = useState<'inflow' | 'outflow'>('inflow')
+  const [category, setCategory] = useState('مبيعات')
+  const [amount, setAmount] = useState<number | ''>('')
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0])
   const [description, setDescription] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cats, setCats] = useState<string[]>([])
+  const [descs, setDescs] = useState<string[]>([])
+
+  useEffect(() => {
+    if (isOpen) { setCats(getSavedCategories()); setDescs(getSavedDescriptions()) }
+  }, [isOpen])
 
   if (!isOpen) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!projectId || amount <= 0) return
-    onSave({
-      projectId, type, category, amount: Number(amount),
-      entryDate: new Date().toISOString().split('T')[0], description: description.trim()
-    })
-    setDescription(''); setAmount(100); onClose()
+    if (!amount || Number(amount) <= 0) return setError('المبلغ غير صالح')
+    setLoading(true); setError(null)
+    try {
+      await apiClient.post('/api/cashflow', {
+        projectId: projectId || projects[0]?.id, type, category, amount: Number(amount), entryDate, description
+      })
+      saveCategory(category)
+      if (description) saveDescription(description)
+      onCreated(); onClose()
+    } catch (err) { setError(err instanceof Error ? err.message : 'فشل تسجيل الحركة') }
+    finally { setLoading(false) }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-indigo-400" /><h3 className="font-semibold text-slate-100">تسجيل قيد صادر / وارد</h3>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"><X className="w-5 h-5" /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" dir="rtl">
+      <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+          <h2 className="text-base font-bold text-white">تسجيل حركة صادر / وارد</h2>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-3">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button type="button" onClick={() => setType('inflow')} className={`p-2 rounded-xl border font-bold transition ${type === 'inflow' ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>وارد (إيراد)</button>
-            <button type="button" onClick={() => setType('outflow')} className={`p-2 rounded-xl border font-bold transition ${type === 'outflow' ? 'bg-rose-950/40 border-rose-500/50 text-rose-300' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>صادر (مصروف)</button>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">المشروع *</label>
-            <select required value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500">
-              <option value="">-- حدد المشروع --</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
+        {error && <div className="p-2 text-xs text-rose-400 bg-rose-500/10 rounded-lg">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
+            {projects?.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <select value={type} onChange={(e) => { const t = e.target.value as 'inflow' | 'outflow'; setType(t); setCategory(t === 'inflow' ? 'مبيعات' : 'مشتريات') }} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white">
+              <option value="inflow">وارد (+ إيراد)</option>
+              <option value="outflow">صادر (- مصروف)</option>
             </select>
+            <input type="number" min="0.01" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))} placeholder="المبلغ (ج)" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white" />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">المبلغ ($) *</label>
-              <input type="number" min={0.01} step="any" required value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500" />
+              <input list="cat-suggestions" required value={category} placeholder="التصنيف / العنوان" onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white" />
+              <datalist id="cat-suggestions">{cats.map((c, i) => <option key={i} value={c} />)}</datalist>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">التصنيف</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500">
-                <option value="raw_material">خامات وزيوت</option><option value="bottles_packaging">زجاجات وتغليف</option>
-                <option value="shipping">شحن وتوصيل</option><option value="sales">مبيعات</option><option value="marketing">تسويق</option><option value="general">عام</option>
-              </select>
-            </div>
+            <input type="date" required value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white" />
           </div>
-
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">البيان</label>
-            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="مثال: شراء كحول نقي، دفعة زجاجات..." className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500" />
+            <input list="desc-suggestions" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white" placeholder="البيان / الوصف (اختر من المحفوظ أو اكتب جديد)" />
+            <datalist id="desc-suggestions">{descs.map((d, i) => <option key={i} value={d} />)}</datalist>
           </div>
-
-          <div className="pt-2 flex gap-3 justify-end">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition">إلغاء</button>
-            <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition">تسجيل القيد</button>
+          <div className="flex gap-2 pt-2">
+            <button type="submit" disabled={loading} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold">{loading ? 'جاري الحفظ...' : 'تسجيل القيد'}</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs">إلغاء</button>
           </div>
         </form>
       </div>

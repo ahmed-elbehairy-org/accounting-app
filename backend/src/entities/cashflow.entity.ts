@@ -1,10 +1,8 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm'
+import { Entity, Column } from 'typeorm'
+import { BaseAppEntity } from './base.entity'
 
 @Entity('cashflows')
-export class CashflowEntity {
-  @PrimaryColumn()
-  id: string
-
+export class CashflowEntity extends BaseAppEntity {
   @Column()
   projectId: string
 
@@ -22,10 +20,5 @@ export class CashflowEntity {
 
   @Column({ default: '' })
   description: string
-
-  @Column({ nullable: true })
-  linkedProductId?: string
-
-  @CreateDateColumn()
-  createdAt: Date
 }
+

@@ -3,84 +3,87 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import { LiquidationEntity } from '../../entities/liquidation.entity'
 import { SettlementPayoutEntity } from '../../entities/settlement-payout.entity'
-import { TradingRoundEntity } from '../../entities/trading-round.entity'
-import { ShareInvestmentEntity } from '../../entities/share-investment.entity'
+import { ProjectEntity } from '../../entities/project.entity'
 import { PartnerEntity } from '../../entities/partner.entity'
-import { AdvanceLoanEntity } from '../../entities/advance-loan.entity'
-import { computePartnerPayouts } from './liquidation.calculator'
+import { ShareInvestmentEntity } from '../../entities/share-investment.entity'
+import { CashflowEntity } from '../../entities/cashflow.entity'
+import { BaseService } from '../../common/base.service'
+import { computeLiquidation, LiquidationPartnerInput } from './liquidationEngine'
 
 @Injectable()
-export class LiquidationsService {
+export class LiquidationsService extends BaseService<LiquidationEntity> {
   constructor(
-    @InjectRepository(LiquidationEntity)
-    private readonly liqRepo: Repository<LiquidationEntity>,
-    @InjectRepository(SettlementPayoutEntity)
-    private readonly payoutRepo: Repository<SettlementPayoutEntity>,
-    @InjectRepository(TradingRoundEntity)
-    private readonly roundRepo: Repository<TradingRoundEntity>,
-    @InjectRepository(ShareInvestmentEntity)
-    private readonly invRepo: Repository<ShareInvestmentEntity>,
-    @InjectRepository(PartnerEntity)
-    private readonly partnerRepo: Repository<PartnerEntity>,
-    @InjectRepository(AdvanceLoanEntity)
-    private readonly advRepo: Repository<AdvanceLoanEntity>
-  ) {}
+    @InjectRepository(LiquidationEntity) repo: Repository<LiquidationEntity>,
+    @InjectRepository(SettlementPayoutEntity) private readonly payoutRepo: Repository<SettlementPayoutEntity>,
+    @InjectRepository(ProjectEntity) private readonly projectRepo: Repository<ProjectEntity>,
+    @InjectRepository(PartnerEntity) private readonly partnerRepo: Repository<PartnerEntity>,
+    @InjectRepository(ShareInvestmentEntity) private readonly shareRepo: Repository<ShareInvestmentEntity>,
+    @InjectRepository(CashflowEntity) private readonly cashflowRepo: Repository<CashflowEntity>
+  ) { super(repo) }
 
-  async findAll() {
-    const liquidations = await this.liqRepo.find({ order: { createdAt: 'DESC' } })
-    const settlements = await this.payoutRepo.find({ order: { createdAt: 'DESC' } })
-    return { liquidations, settlements }
+  private async getPartnerInputs(projectId: string, unitPrice: number): Promise<LiquidationPartnerInput[]> {
+    const activeInvs = (await this.shareRepo.find({ where: { projectId } })).filter((i) => !i.deletedAt)
+    const map = new Map<string, number>()
+    activeInvs.forEach((i) => map.set(i.partnerId, (map.get(i.partnerId) || 0) + Number(i.shareCount)))
+    const partnerIds = Array.from(map.keys())
+    const partners = partnerIds.length ? await this.partnerRepo.findByIds(partnerIds) : []
+
+    return partners.map((p) => ({
+      partnerId: p.id, shareCount: map.get(p.id) || 0,
+      shareUnitPrice: unitPrice, outstandingLoans: Number(p.outstandingLoans || 0)
+    }))
   }
 
-  async getFullState() {
-    const [partners, rounds, investments, advances, liquidations, settlements] = await Promise.all([
-      this.partnerRepo.find({ order: { createdAt: 'DESC' } }),
-      this.roundRepo.find({ order: { createdAt: 'DESC' } }),
-      this.invRepo.find({ order: { createdAt: 'DESC' } }),
-      this.advRepo.find({ order: { createdAt: 'DESC' } }),
-      this.liqRepo.find({ order: { createdAt: 'DESC' } }),
-      this.payoutRepo.find({ order: { createdAt: 'DESC' } })
-    ])
-    return { partners, rounds, investments, advances, liquidations, settlements }
+  async preview(projectId: string, finalAssetValue: number) {
+    const project = await this.projectRepo.findOne({ where: { id: projectId } })
+    if (!project) throw new NotFoundException('المشروع غير موجود')
+    const inputs = await this.getPartnerInputs(projectId, Number(project.shareUnitPrice) || 1000)
+    return { project, calculation: computeLiquidation(Number(finalAssetValue), Number(project.workerProfitPercentage), inputs) }
   }
 
-  async execute(roundId: string, finalAssetValue: number, notes?: string) {
-    const round = await this.roundRepo.findOne({ where: { id: roundId } })
-    if (!round) throw new NotFoundException('Round not found')
+  async execute(projectId: string, finalAssetValue: number, notes?: string) {
+    const { project, calculation: c } = await this.preview(projectId, finalAssetValue)
+    const liq = await this.repository.save(this.repository.create({
+      projectId, liquidationDate: new Date().toISOString().split('T')[0],
+      initialCapital: c.initialCapital, finalAssetValue: c.finalAssetValue,
+      grossProfitOrLoss: c.grossProfitOrLoss, workerProfit: c.workerProfit,
+      investorsProfitPool: c.investorsProfitPool, returnPerShare: c.returnPerShare, notes: notes || ''
+    }))
 
-    const roundInvs = await this.invRepo.find({ where: { roundId } })
-    const partners = await this.partnerRepo.find()
-    const openAdvances = await this.advRepo.find({ where: { status: 'open' } })
+    const payouts = await this.payoutRepo.save(c.payouts.map((p) => this.payoutRepo.create({
+      ...p, liquidationId: liq.id, projectId, paid: true
+    })))
 
-    const totalShares = roundInvs.reduce((sum, i) => sum + i.shareCount, 0)
-    const initialCapital = roundInvs.reduce((sum, i) => sum + Number(i.totalAmount), 0)
-    const assetVal = Number(finalAssetValue)
-    const grossProfit = assetVal - initialCapital
-    const isProfit = grossProfit > 0
-    const managerProfit = isProfit ? grossProfit * (Number(round.managerProfitCutPercent) / 100) : 0
-    const investorsProfitPool = isProfit ? grossProfit - managerProfit : grossProfit
-    const profitPerShare = totalShares > 0 ? investorsProfitPool / totalShares : 0
-    const date = new Date().toISOString().split('T')[0]
-    const liqId = `liq-${Date.now()}`
+    if (Number(c.workerProfit) > 0) {
+      await this.cashflowRepo.save(this.cashflowRepo.create({
+        projectId, type: 'outflow', category: 'تصفية - حصة عامل', amount: Number(c.workerProfit),
+        entryDate: liq.liquidationDate, description: `صرف حصة العامل عند التصفية (${c.workerProfit} ج)`
+      }))
+    }
 
-    const liquidation = this.liqRepo.create({
-      id: liqId, roundId, liquidationDate: date, initialCapital, finalAssetValue: assetVal,
-      grossProfitOrLoss: grossProfit, managerProfit, investorsProfitPool,
-      returnPerShare: totalShares > 0 ? assetVal / totalShares : 0, notes: notes || ''
-    })
+    for (const p of c.payouts) {
+      const partner = await this.partnerRepo.findOne({ where: { id: p.partnerId } })
+      if (!partner) continue
+      if (p.deductedAdvances > 0) partner.outstandingLoans = Math.max(0, Number(partner.outstandingLoans || 0) - p.deductedAdvances)
+      partner.activeSharesCount = Math.max(0, Number(partner.activeSharesCount || 0) - p.sharesCount)
+      partner.totalInvestedCapital = Math.max(0, Number(partner.totalInvestedCapital || 0) - (p.sharesCount * Number(project.shareUnitPrice)))
+      await this.partnerRepo.save(partner)
 
-    const payouts = computePartnerPayouts({
-      liqId, roundId, isProfit, profitPerShare, roundInvs, partners, openAdvances
-    })
+      if (Number(p.netPayable) > 0) {
+        await this.cashflowRepo.save(this.cashflowRepo.create({
+          projectId, type: 'outflow', category: 'تصفية - مستحقات شريك', amount: Number(p.netPayable),
+          entryDate: liq.liquidationDate, description: `صرف مستحقات تصفية للشريك (${p.netPayable} ج)`
+        }))
+      }
+    }
 
-    round.status = 'liquidated'
-    round.endDate = date
+    project.status = 'liquidated'
+    project.endDate = liq.liquidationDate
+    await this.projectRepo.save(project)
+    return { liquidation: liq, payouts, project }
+  }
 
-    await this.liqRepo.save(liquidation)
-    await this.payoutRepo.save(payouts)
-    await this.roundRepo.save(round)
-    await this.partnerRepo.save(partners)
-
-    return { liquidation, settlements: payouts }
+  getPayouts(liquidationId: string) {
+    return this.payoutRepo.find({ where: { liquidationId } })
   }
 }

@@ -1,76 +1,80 @@
-import { useState } from 'react'
-import { UserPlus, Search } from 'lucide-react'
-import type { Partner, AppState } from '../../types/mudharaba'
-import { PartnerModal } from './PartnerModal'
-import { PartnerStatement } from './PartnerStatement'
+import { useState, useEffect, useCallback } from 'react'
+import type { Partner } from '../../types'
+import type { PartnerGlobalStats } from '../../types/partner'
+import { apiClient } from '../../services/apiClient'
+import { PartnerStatsCards } from './PartnerStatsCards'
 import { PartnerCard } from './PartnerCard'
+import { PartnerModal } from './PartnerModal'
+import { PartnerStatementModal } from './PartnerStatementModal'
+import { NewAdvanceModal } from './NewAdvanceModal'
+import { Plus, Users } from 'lucide-react'
 
-interface Props {
-  state: AppState
-  onAddPartner: (partner: Omit<Partner, 'id' | 'activeSharesCount' | 'totalInvestedCapital' | 'outstandingLoans'>) => void
-}
+export function PartnerList() {
+  const [partners, setPartners] = useState<Partner[]>([])
+  const [stats, setStats] = useState<PartnerGlobalStats | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingPartner, setEditingPartner] = useState<Partner | null>(null)
+  const [stmtPartner, setStmtPartner] = useState<Partner | null>(null)
+  const [advPartner, setAdvPartner] = useState<Partner | null>(null)
 
-export function PartnerList({ state, onAddPartner }: Props) {
-  const [search, setSearch] = useState('')
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
+  const fetchPartners = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [list, s] = await Promise.all([
+        apiClient.get<Partner[]>('/api/partners'),
+        apiClient.get<PartnerGlobalStats>('/api/partners/stats')
+      ])
+      setPartners(list || []); setStats(s)
+    } finally { setLoading(false) }
+  }, [])
 
-  const filtered = state.partners.filter(
-    (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.phone.includes(search)
-  )
+  useEffect(() => { fetchPartners() }, [fetchPartners])
 
-  const totalShares = state.partners.reduce((sum, p) => sum + p.activeSharesCount, 0)
-  const totalLoans = state.partners.reduce((sum, p) => sum + p.outstandingLoans, 0)
+  const handleDelete = async (id: string) => {
+    await apiClient.delete(`/api/partners/${id}`)
+    await fetchPartners()
+  }
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800">
-          <span className="text-xs text-slate-400">إجمالي الشركاء</span>
-          <div className="mt-1 text-2xl font-bold text-white">{state.partners.length} شريك</div>
+      <div className="flex justify-between items-center bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-600/10 text-indigo-400 rounded-xl"><Users className="w-5 h-5" /></div>
+          <div>
+            <h2 className="text-base font-bold text-white">إدارة الشركاء والمساهمين</h2>
+            <p className="text-xs text-slate-400">متابعة حسابات الشركاء، الأسهم، رؤوس الأموال، والسلف الفردية</p>
+          </div>
         </div>
-        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800">
-          <span className="text-xs text-slate-400">إجمالي الأسهم المكتتبة</span>
-          <div className="mt-1 text-2xl font-bold text-indigo-400">{totalShares} سهم</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800">
-          <span className="text-xs text-slate-400">إجمالي السلف المعلقة</span>
-          <div className="mt-1 text-2xl font-bold text-rose-400">${totalLoans.toLocaleString()}</div>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text" placeholder="بحث بالاسم أو الهاتف..." value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pr-9 pl-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-          />
-        </div>
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition shadow-lg shadow-indigo-600/25 shrink-0"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>إضافة شريك جديد</span>
+        <button onClick={() => { setEditingPartner(null); setIsModalOpen(true) }} className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md transition">
+          <Plus className="w-3.5 h-3.5" /> شريك جديد
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.length === 0 ? (
-          <div className="col-span-full p-12 text-center text-slate-500 bg-slate-900/20 border border-slate-800 rounded-2xl">
-            لا يوجد شركاء مسجلين
-          </div>
-        ) : (
-          filtered.map((partner) => (
-            <PartnerCard key={partner.id} partner={partner} onOpenStatement={(p) => setSelectedPartner(p)} />
-          ))
-        )}
-      </div>
+      <PartnerStatsCards stats={stats} />
 
-      <PartnerModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} onSave={onAddPartner} />
-      <PartnerStatement partner={selectedPartner} state={state} onClose={() => setSelectedPartner(null)} />
+      {loading ? <div className="text-center py-10 text-xs text-slate-500">جاري تحميل الشركاء...</div> : partners?.length === 0 ? (
+        <div className="text-center py-12 bg-slate-900/30 border border-dashed border-slate-800 rounded-2xl">
+          <p className="text-slate-400 text-xs">لا يوجد شركاء مسجلين حالياً</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {partners?.map((partner) => (
+            <PartnerCard
+              key={partner.id}
+              partner={partner}
+              onViewStatement={(p) => setStmtPartner(p)}
+              onIssueAdvance={(p) => setAdvPartner(p)}
+              onEdit={(p) => { setEditingPartner(p); setIsModalOpen(true) }}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+
+      <PartnerModal isOpen={isModalOpen} partner={editingPartner} onClose={() => { setIsModalOpen(false); setEditingPartner(null) }} onSaved={fetchPartners} />
+      <PartnerStatementModal partner={stmtPartner} onClose={() => setStmtPartner(null)} />
+      <NewAdvanceModal partner={advPartner} onClose={() => setAdvPartner(null)} onCreated={fetchPartners} />
     </div>
   )
 }

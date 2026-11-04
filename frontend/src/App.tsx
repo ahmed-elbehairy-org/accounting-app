@@ -1,80 +1,76 @@
-import { useState } from 'react'
-import type { TradingRound } from './types/mudharaba'
-import { useMudharabaState } from './hooks/useMudharabaState'
-import { AppHeader } from './components/layout/AppHeader'
+import { useState, useEffect, useCallback } from 'react'
 import { AppNavigation, type TabType } from './components/layout/AppNavigation'
-
-import { DashboardTab } from './components/dashboard/DashboardTab'
-import { PartnerList } from './components/partners/PartnerList'
-import { RoundList } from './components/rounds/RoundList'
-import { AdvancesList } from './components/advances/AdvancesList'
-import { LiquidationHistoryTab } from './components/liquidation/LiquidationHistoryTab'
-import { LiquidationWizard } from './components/liquidation/LiquidationWizard'
+import { TrashTab, type DeletedRecord } from './components/trash/TrashTab'
 import { ProjectList } from './components/projects/ProjectList'
 import { CashflowList } from './components/cashflow/CashflowList'
-import { ProductCostingList } from './components/costing/ProductCostingList'
+import { DistributionList } from './components/distributions/DistributionList'
+import { LiquidationList } from './components/liquidation/LiquidationList'
+import { PartnerList } from './components/partners/PartnerList'
+import { apiClient } from './services/apiClient'
+import { buildTrashRecords } from './utils/trashRecords'
+import type { Project, CashflowItem, Partner } from './types'
 
 export default function App() {
-  const {
-    state, setState, addPartner, addRound, allocateShares, addAdvance,
-    settleAdvance, addProject, addCashflow, addProduct, addCostItem, resetAllData
-  } = useMudharabaState()
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard')
-  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>()
-  const [activeLiquidationRound, setActiveLiquidationRound] = useState<TradingRound | null>(null)
+  const [activeTab, setActiveTab] = useState<TabType>('projects')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [delProjects, setDelProjects] = useState<Project[]>([])
+  const [delCashflows, setDelCashflows] = useState<CashflowItem[]>([])
+  const [delPartners, setDelPartners] = useState<Partner[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const [projs, pTrash, cfTrash, ptTrash] = await Promise.all([
+        apiClient.get<Project[]>('/api/projects'),
+        apiClient.get<Project[]>('/api/projects/trash'),
+        apiClient.get<CashflowItem[]>('/api/cashflow/trash'),
+        apiClient.get<Partner[]>('/api/partners/trash')
+      ])
+      setProjects(projs || []); setDelProjects(pTrash || [])
+      setDelCashflows(cfTrash || []); setDelPartners(ptTrash || [])
+    } catch (err) { setError(err instanceof Error ? err.message : 'فشل الاتصال بالخادم') }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const handleSoftDelete = async (id: string) => {
+    await apiClient.delete(`/api/projects/${id}`)
+    await fetchData()
+  }
+
+  const handleRestore = async (cat: DeletedRecord['category'], id: string) => {
+    const ep = cat === 'cashflows' ? 'cashflow' : cat
+    await apiClient.patch(`/api/${ep}/${id}/restore`)
+    await fetchData()
+  }
+
+  const handlePermanentDelete = async (cat: DeletedRecord['category'], id: string) => {
+    const ep = cat === 'cashflows' ? 'cashflow' : cat
+    await apiClient.delete(`/api/${ep}/${id}/permanent`)
+    await fetchData()
+  }
+
+  const trashRecords = buildTrashRecords(delProjects, delCashflows, delPartners)
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white" dir="rtl">
-      <AppHeader onReset={resetAllData} />
-      <AppNavigation activeTab={activeTab} onSelectTab={(t) => setActiveTab(t)} state={state} />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
-        {activeTab === 'dashboard' && (
-          <DashboardTab
-            state={state} onSelectTab={(t) => setActiveTab(t)}
-            onAddRound={addRound} onAllocateShares={allocateShares}
-            onOpenLiquidation={(r) => setActiveLiquidationRound(r)}
-          />
-        )}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased" dir="rtl">
+      <AppNavigation activeTab={activeTab} onSelectTab={setActiveTab} deletedCount={trashRecords.length} />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full space-y-6">
+        {error && <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl">{error}</div>}
         {activeTab === 'projects' && (
-          <ProjectList
-            projects={state.projects} cashflows={state.cashflows}
-            onAddProject={addProject}
-            onSelectProject={(id) => { setSelectedProjectId(id); setActiveTab('cashflow') }}
-          />
+          <ProjectList projects={projects} loading={loading} onRefresh={fetchData} onDelete={handleSoftDelete} />
         )}
-        {activeTab === 'cashflow' && (
-          <CashflowList
-            cashflows={state.cashflows} projects={state.projects}
-            selectedProjectId={selectedProjectId} onAddCashflow={addCashflow}
-          />
+        {activeTab === 'partners' && <PartnerList />}
+        {activeTab === 'cashflow' && <CashflowList projects={projects} />}
+        {activeTab === 'distributions' && <DistributionList projects={projects} />}
+        {activeTab === 'liquidations' && <LiquidationList projects={projects} onRefreshParent={fetchData} />}
+        {activeTab === 'trash' && (
+          <TrashTab items={trashRecords} onRestore={handleRestore} onPermanentDelete={handlePermanentDelete} />
         )}
-        {activeTab === 'costing' && (
-          <ProductCostingList
-            products={state.products} costItems={state.costItems}
-            projects={state.projects} cashflows={state.cashflows}
-            onAddProduct={addProduct} onAddCostItem={addCostItem}
-          />
-        )}
-        {activeTab === 'partners' && <PartnerList state={state} onAddPartner={addPartner} />}
-        {activeTab === 'rounds' && (
-          <RoundList
-            state={state} onAddRound={addRound} onAllocateShares={allocateShares}
-            onOpenLiquidation={(r) => setActiveLiquidationRound(r)}
-          />
-        )}
-        {activeTab === 'advances' && <AdvancesList state={state} onAddAdvance={addAdvance} onSettleAdvance={settleAdvance} />}
-        {activeTab === 'liquidations' && <LiquidationHistoryTab state={state} onGoToRounds={() => setActiveTab('rounds')} />}
       </main>
-
-      <LiquidationWizard
-        round={activeLiquidationRound} state={state}
-        onClose={() => setActiveLiquidationRound(null)} onCommitLiquidation={(u) => setState(u)}
-      />
-
-      <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500 print:hidden">
-        نظام محاسبة المشاريع والصادر والوارد وتكلفة المنتجات • React 19 + TypeScript + NestJS + PostgreSQL
-      </footer>
     </div>
   )
 }

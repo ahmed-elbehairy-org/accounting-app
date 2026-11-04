@@ -1,10 +1,8 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm'
+import { Entity, Column } from 'typeorm'
+import { BaseAppEntity } from './base.entity'
 
 @Entity('partners')
-export class PartnerEntity {
-  @PrimaryColumn()
-  id: string
-
+export class PartnerEntity extends BaseAppEntity {
   @Column()
   name: string
 
@@ -25,7 +23,5 @@ export class PartnerEntity {
 
   @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   outstandingLoans: number
-
-  @CreateDateColumn()
-  createdAt: Date
 }
+

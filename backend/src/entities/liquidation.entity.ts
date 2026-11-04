@@ -1,12 +1,10 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm'
+import { Entity, Column } from 'typeorm'
+import { BaseAppEntity } from './base.entity'
 
 @Entity('liquidations')
-export class LiquidationEntity {
-  @PrimaryColumn()
-  id: string
-
+export class LiquidationEntity extends BaseAppEntity {
   @Column()
-  roundId: string
+  projectId: string
 
   @Column()
   liquidationDate: string
@@ -21,7 +19,7 @@ export class LiquidationEntity {
   grossProfitOrLoss: number
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
-  managerProfit: number
+  workerProfit: number
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   investorsProfitPool: number
@@ -31,7 +29,5 @@ export class LiquidationEntity {
 
   @Column({ default: '' })
   notes: string
-
-  @CreateDateColumn()
-  createdAt: Date
 }
+

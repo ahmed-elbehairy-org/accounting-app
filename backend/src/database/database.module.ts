@@ -1,16 +1,6 @@
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { ConfigModule, ConfigService } from '@nestjs/config'
-import { PartnerEntity } from '../entities/partner.entity'
-import { TradingRoundEntity } from '../entities/trading-round.entity'
-import { ShareInvestmentEntity } from '../entities/share-investment.entity'
-import { AdvanceLoanEntity } from '../entities/advance-loan.entity'
-import { LiquidationEntity } from '../entities/liquidation.entity'
-import { SettlementPayoutEntity } from '../entities/settlement-payout.entity'
-import { ProjectEntity } from '../entities/project.entity'
-import { CashflowEntity } from '../entities/cashflow.entity'
-import { ProductEntity } from '../entities/product.entity'
-import { ProductCostItemEntity } from '../entities/product-cost-item.entity'
 
 @Module({
   imports: [
@@ -20,19 +10,16 @@ import { ProductCostItemEntity } from '../entities/product-cost-item.entity'
       useFactory: (cfg: ConfigService) => ({
         type: 'postgres',
         host: cfg.get<string>('DB_HOST', 'localhost'),
-        port: cfg.get<number>('DB_PORT', 5432),
+        port: Number(cfg.get<number>('DB_PORT', 5432)),
         username: cfg.get<string>('DB_USERNAME', 'postgres'),
         password: cfg.get<string>('DB_PASSWORD', 'postgres'),
-        database: cfg.get<string>('DB_DATABASE', 'accounting_db'),
-        entities: [
-          PartnerEntity, TradingRoundEntity, ShareInvestmentEntity,
-          AdvanceLoanEntity, LiquidationEntity, SettlementPayoutEntity,
-          ProjectEntity, CashflowEntity, ProductEntity, ProductCostItemEntity
-        ],
-        synchronize: cfg.get<boolean>('DB_SYNCHRONIZE', true),
+        database: cfg.get<string>('DB_DATABASE', 'accounting'),
+        autoLoadEntities: true,
+        synchronize: cfg.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
         logging: false
       })
     })
   ]
 })
 export class DatabaseModule {}
+

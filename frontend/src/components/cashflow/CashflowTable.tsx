@@ -1,64 +1,71 @@
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
-import type { CashflowItem, Project } from '../../types/accounting'
+import type { CashflowItem } from '../../types'
+import { DeleteButton } from '../common/DeleteButton'
+import { ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 
 interface Props {
   items: CashflowItem[]
-  projects: Project[]
+  loading: boolean
+  onDelete: (id: string) => void
 }
 
-const CATEGORY_NAMES: Record<string, string> = {
-  raw_material: 'خامات وزيوت',
-  bottles_packaging: 'زجاجات وتغليف',
-  shipping: 'شحن وتوصيل',
-  sales: 'مبيعات',
-  marketing: 'تسويق',
-  general: 'عام'
-}
+export function CashflowTable({ items, loading, onDelete }: Props) {
+  if (loading) {
+    return <div className="text-center py-10 text-xs text-slate-500">جاري تحميل القيود المالية...</div>
+  }
 
-export function CashflowTable({ items, projects }: Props) {
-  if (items.length === 0) {
-    return <div className="p-8 text-center text-slate-500 text-xs">لا توجد قيود صادر أو وارد مطابقة</div>
+  if (items?.length === 0) {
+    return (
+      <div className="text-center py-12 bg-slate-900/30 border border-dashed border-slate-800 rounded-2xl">
+        <p className="text-slate-400 text-xs">لا توجد حركات صادر أو وارد مسجلة</p>
+      </div>
+    )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-right text-xs">
-        <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
-          <tr>
-            <th className="p-3">النوع</th>
-            <th className="p-3">المشروع</th>
-            <th className="p-3">التصنيف</th>
-            <th className="p-3">المبلغ</th>
-            <th className="p-3">البيان</th>
-            <th className="p-3">التاريخ</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-800">
-          {items.map((item) => {
-            const project = projects.find((p) => p.id === item.projectId)
-            const isOut = item.type === 'outflow'
-            return (
-              <tr key={item.id} className="hover:bg-slate-800/40 transition">
-                <td className="p-3">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isOut ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
-                    {isOut ? <ArrowDownRight className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
-                    {isOut ? 'صادر' : 'وارد'}
-                  </span>
-                </td>
-                <td className="p-3 font-semibold text-slate-100">{project?.name || item.projectId}</td>
-                <td className="p-3 text-slate-300">
-                  <span className="px-2 py-0.5 rounded bg-slate-800 text-[11px]">{CATEGORY_NAMES[item.category] || item.category}</span>
-                </td>
-                <td className={`p-3 font-bold text-sm ${isOut ? 'text-rose-400' : 'text-emerald-400'}`}>
-                  {isOut ? '-' : '+'}${item.amount.toLocaleString()}
-                </td>
-                <td className="p-3 text-slate-400 max-w-xs truncate">{item.description || '-'}</td>
-                <td className="p-3 text-slate-400">{item.entryDate}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-xs">
+          <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800">
+            <tr>
+              <th className="py-3 px-4">التاريخ</th>
+              <th className="py-3 px-4">النوع</th>
+              <th className="py-3 px-4">التصنيف</th>
+              <th className="py-3 px-4">الوصف</th>
+              <th className="py-3 px-4">المبلغ</th>
+              <th className="py-3 px-4 text-center">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/60 text-slate-200">
+            {items?.map((item) => {
+              const isInflow = item.type === 'inflow'
+              return (
+                <tr key={item.id} className="hover:bg-slate-800/30 transition">
+                  <td className="py-3 px-4 font-mono text-slate-400">{item.entryDate}</td>
+                  <td className="py-3 px-4">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                      isInflow
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                    }`}>
+                      {isInflow ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+                      {isInflow ? 'وارد (إيراد)' : 'صادر (مصروف)'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-slate-300">{item.category}</td>
+                  <td className="py-3 px-4 text-slate-400 max-w-xs truncate">{item.description || '-'}</td>
+                  <td className={`py-3 px-4 font-bold font-mono ${isInflow ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isInflow ? '+' : '-'}{Number(item.amount).toLocaleString()} ج
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <DeleteButton onDelete={() => onDelete(item.id)} />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
+

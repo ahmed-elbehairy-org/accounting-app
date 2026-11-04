@@ -1,74 +1,82 @@
 import { useState } from 'react'
-import { FolderPlus, Search } from 'lucide-react'
-import type { Project, CashflowItem } from '../../types/accounting'
+import type { Project } from '../../types'
 import { ProjectCard } from './ProjectCard'
-import { NewProjectModal } from './NewProjectModal'
+import { ProjectFormModal } from './ProjectFormModal'
+import { AllocateSharesModal } from './AllocateSharesModal'
+import { ProjectDetails } from './details/ProjectDetails'
+import { Plus, FolderKanban } from 'lucide-react'
 
 interface Props {
   projects: Project[]
-  cashflows: CashflowItem[]
-  onAddProject: (p: Omit<Project, 'id' | 'createdAt'>) => void
-  onSelectProject: (projectId: string) => void
+  loading: boolean
+  onRefresh: () => void
+  onDelete: (id: string) => void
 }
 
-export function ProjectList({ projects, cashflows, onAddProject, onSelectProject }: Props) {
-  const [search, setSearch] = useState('')
+export function ProjectList({ projects, loading, onRefresh, onDelete }: Props) {
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [allocatingProject, setAllocatingProject] = useState<Project | null>(null)
 
-  const filtered = projects.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) || p.code.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const totalInflow = cashflows.filter((c) => c.type === 'inflow').reduce((s, c) => s + c.amount, 0)
-  const totalOutflow = cashflows.filter((c) => c.type === 'outflow').reduce((s, c) => s + c.amount, 0)
+  if (selectedProject) {
+    const fresh = projects.find((p) => p.id === selectedProject.id) || selectedProject
+    return (
+      <ProjectDetails
+        project={fresh}
+        onBack={() => setSelectedProject(null)}
+        onRefreshParent={onRefresh}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800">
-          <span className="text-xs text-slate-400">إجمالي المشاريع</span>
-          <div className="mt-1 text-2xl font-bold text-white">{projects.length} مشروع</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800">
-          <span className="text-xs text-slate-400">إجمالي إيرادات المشاريع (الوارد)</span>
-          <div className="mt-1 text-2xl font-bold text-emerald-400">${totalInflow.toLocaleString()}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800">
-          <span className="text-xs text-slate-400">إجمالي مصاريف المشاريع (الصادر)</span>
-          <div className="mt-1 text-2xl font-bold text-rose-400">${totalOutflow.toLocaleString()}</div>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text" placeholder="بحث باسم المشروع أو الكود..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pr-9 pl-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
-          />
+      <div className="flex justify-between items-center bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-600/10 text-indigo-400 rounded-xl"><FolderKanban className="w-5 h-5" /></div>
+          <div>
+            <h2 className="text-base font-bold text-white">مشاريع المضاربة الشرعية</h2>
+            <p className="text-xs text-slate-400">إدارة حصص العامل والشركاء وتوزيع الأرباح والتصفية</p>
+          </div>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition shadow-lg shadow-indigo-600/25 shrink-0"
+          onClick={() => { setEditingProject(null); setIsModalOpen(true) }}
+          className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md transition"
         >
-          <FolderPlus className="w-4 h-4" />
-          <span>إضافة مشروع جديد</span>
+          <Plus className="w-4 h-4" />
+          مشروع جديد
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.length === 0 ? (
-          <div className="col-span-full p-12 text-center text-slate-500 bg-slate-900/20 border border-slate-800 rounded-2xl">
-            لا توجد مشاريع مسجلة حالياً
-          </div>
-        ) : (
-          filtered.map((proj) => (
-            <ProjectCard key={proj.id} project={proj} cashflows={cashflows} onSelectProject={onSelectProject} />
-          ))
-        )}
-      </div>
+      {loading ? (
+        <div className="text-center py-12 text-slate-500 text-xs">جاري تحميل المشاريع...</div>
+      ) : projects?.length === 0 ? (
+        <div className="text-center py-16 bg-slate-900/30 border border-dashed border-slate-800 rounded-2xl">
+          <p className="text-slate-400 text-sm">لا توجد مشاريع مضاربة حالية</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {projects?.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onSelect={(p) => setSelectedProject(p)}
+              onAllocate={(p) => setAllocatingProject(p)}
+              onEdit={(p) => { setEditingProject(p); setIsModalOpen(true) }}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
 
-      <NewProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={onAddProject} />
+      <ProjectFormModal
+        isOpen={isModalOpen}
+        project={editingProject}
+        onClose={() => { setIsModalOpen(false); setEditingProject(null) }}
+        onSaved={onRefresh}
+      />
+      <AllocateSharesModal project={allocatingProject} onClose={() => setAllocatingProject(null)} onAllocated={onRefresh} />
     </div>
   )
 }

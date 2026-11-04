@@ -6,6 +6,14 @@
     "dev": "nest start --watch",
     "start": "nest start",
     "build": "nest build",
+    "test:integration": "node test_integration.js",
+    "test:phase3": "node test_phase3_projects.js",
+    "test:phase4": "node test_phase4_cashflow.js",
+    "test:phase5": "node test_phase5_distributions.js",
+    "test:phase6": "node test_phase6_liquidations.js",
+    "test:phase7": "node test_phase7_partners.js",
+    "test:delete": "node test_delete_cycle.js",
+    "test:sync": "node test_cashflow_sync.js",
     "start:prod": "node dist/main"
   },
   "dependencies": {

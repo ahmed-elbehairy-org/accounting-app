@@ -1,15 +1,13 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm'
+import { Entity, Column } from 'typeorm'
+import { BaseAppEntity } from './base.entity'
 
 @Entity('settlement_payouts')
-export class SettlementPayoutEntity {
-  @PrimaryColumn()
-  id: string
-
+export class SettlementPayoutEntity extends BaseAppEntity {
   @Column()
   liquidationId: string
 
   @Column()
-  roundId: string
+  projectId: string
 
   @Column()
   partnerId: string
@@ -34,7 +32,5 @@ export class SettlementPayoutEntity {
 
   @Column({ default: false })
   paid: boolean
-
-  @CreateDateColumn()
-  createdAt: Date
 }
+

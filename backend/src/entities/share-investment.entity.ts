@@ -1,20 +1,18 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn } from 'typeorm'
+import { Entity, Column } from 'typeorm'
+import { BaseAppEntity } from './base.entity'
 
 @Entity('share_investments')
-export class ShareInvestmentEntity {
-  @PrimaryColumn()
-  id: string
-
+export class ShareInvestmentEntity extends BaseAppEntity {
   @Column()
   partnerId: string
 
   @Column()
-  roundId: string
+  projectId: string
 
   @Column({ type: 'int' })
   shareCount: number
 
-  @Column({ type: 'decimal', precision: 12, scale: 2 })
+  @Column({ type: 'decimal', precision: 14, scale: 4 })
   shareUnitPrice: number
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
@@ -22,7 +20,5 @@ export class ShareInvestmentEntity {
 
   @Column()
   date: string
-
-  @CreateDateColumn()
-  createdAt: Date
 }
+
